@@ -11,8 +11,6 @@ import java.lang.invoke.VarHandle;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.index.store.block_cache.BlockCacheValue;
-import org.opensearch.index.store.metrics.CryptoMetricsService;
-import org.opensearch.index.store.metrics.ErrorType;
 
 /**
  * A reference-counted wrapper around a {@link MemorySegment} that implements {@link BlockCacheValue}.
@@ -120,7 +118,6 @@ public final class RefCountedMemorySegment implements BlockCacheValue<RefCounted
     public void incRef() {
         int count = (int) REFCOUNT.getAndAdd(this, 1) + 1;
         if (count <= 1) {
-            recordErrorMetric();
             throw new IllegalStateException("Attempted to revive a released segment (refCount=" + count + ")");
         }
     }
@@ -138,7 +135,6 @@ public final class RefCountedMemorySegment implements BlockCacheValue<RefCounted
             // Last reference dropped - return segment to pool
             onFullyReleased.release(this);
         } else if (prev <= 0) {
-            recordErrorMetric();
             throw new IllegalStateException("decRef underflow (refCount=" + (prev - 1) + ')');
         }
     }
@@ -282,13 +278,5 @@ public final class RefCountedMemorySegment implements BlockCacheValue<RefCounted
     @Override
     public RefCountedMemorySegment value() {
         return this;
-    }
-
-    private static void recordErrorMetric() {
-        try {
-            CryptoMetricsService.getInstance().recordError(ErrorType.INTERNAL_ERROR);
-        } catch (Throwable t) {
-            // ignore metric exception
-        }
     }
 }
